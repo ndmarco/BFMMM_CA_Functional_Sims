@@ -34,35 +34,43 @@ run_sim_mean_adj <- function(iter){
                                  basis_degree, n_eigen, boundary_knots,
                                  internal_knots)
     B <- x$B[[1]]
-    nu <- matrix(0,nrow =2, ncol = 8)
-    eta <- array(0, c(8,1,2))
-    p <- matrix(0, 8, 8)
-    for(i in 1:8){
-      p[1,1] = 1
-      if(i > 1){
-        p[i,i] = 2
-        p[i-1,i] = -1
-        p[i,i-1] = -1
+    if(n == 1){
+      nu <- matrix(0,nrow =2, ncol = 8)
+      eta <- array(0, c(8,1,2))
+      p <- matrix(0, 8, 8)
+      for(i in 1:8){
+        p[1,1] = 1
+        if(i > 1){
+          p[i,i] = 2
+          p[i-1,i] = -1
+          p[i,i-1] = -1
+        }
       }
+      
+      nu[1,] <- mvrnorm(n=1, mu = seq(6,-8, -2), Sigma = 4*p)
+      nu[2,] <- mvrnorm(n=1, mu = seq(-8, 6, 2), Sigma = 4*p)
+      for(l in 1:2){
+        eta[,1,l] <- mvrnorm(n=1, mu = rep(rnorm(1,3,1), 8), Sigma = p)
+      }
+      
+      decomp <- svd(rbind(nu, t(eta[,1,])), nv = 8)
+      Phi_i <- matrix(0, nrow = 2, ncol = 8)
+      Phi_i[1,] <- t(rnorm(4, 0, 2)) %*% t(decomp$v[,5:8])
+      Phi_i[2,] <- t(rnorm(4, 0, 2)) %*% t(decomp$v[,5:8])
+      Phi_1 <- Phi_i
+      Phi_i[1,] <- t(rnorm(4, 0, 1.5)) %*% t(decomp$v[,5:8])
+      Phi_i[2,] <- t(rnorm(4, 0, 1.5)) %*% t(decomp$v[,5:8])
+      Phi_2 <- Phi_i
+      Phi <- array(0, dim = c(2, 8, 2))
+      Phi[,,1] <- matrix(Phi_1, nrow = 2)
+      Phi[,,2] <- matrix(Phi_2, nrow = 2)
     }
-
-    nu[1,] <- mvrnorm(n=1, mu = seq(6,-8, -2), Sigma = 4*p)
-    nu[2,] <- mvrnorm(n=1, mu = seq(-8, 6, 2), Sigma = 4*p)
-    for(l in 1:2){
-      eta[,1,l] <- mvrnorm(n=1, mu = rep(4, 8), Sigma = p)
+    if(n != 1){
+      dat <- readRDS(paste("./data/", n_obs_vec[1],"_obs/sim",iter, "/truth.RDS", sep = ""))
+      nu <- dat$nu
+      eta <- dat$eta
+      Phi <- dat$Phi
     }
-
-    decomp <- svd(rbind(nu, t(eta[,1,])), nv = 8)
-    Phi_i <- matrix(0, nrow = 2, ncol = 8)
-    Phi_i[1,] <- t(rnorm(4, 0, 1.5)) %*% t(decomp$v[,5:8])
-    Phi_i[2,] <- t(rnorm(4, 0, 1.5)) %*% t(decomp$v[,5:8])
-    Phi_1 <- Phi_i
-    Phi_i[1,] <- t(rnorm(4, 0, 1)) %*% t(decomp$v[,5:8])
-    Phi_i[2,] <- t(rnorm(4, 0, 1)) %*% t(decomp$v[,5:8])
-    Phi_2 <- Phi_i
-    Phi <- array(0, dim = c(2, 8, 2))
-    Phi[,,1] <- matrix(Phi_1, nrow = 2)
-    Phi[,,2] <- matrix(Phi_2, nrow = 2)
 
     chi <- matrix(rnorm(n_obs *2, 0, 1), ncol = 2, nrow=n_obs)
 
@@ -177,13 +185,13 @@ run_sim_mean_adj <- function(iter){
 ##### Run Simulation
 
 ### Set working dir
-setwd("/Users/nicholasmarco/Documents/CA_sim2")
+setwd("/Users/nicholasmarco/Documents/Covariate_adj_sim/")
 
 ncpu <- min(6, availableCores())
 #
 plan(multisession, workers = ncpu)
 
-already_ran <- dir(paste0(getwd(), "/240_obs"))
+already_ran <- dir(paste0(getwd(), "/Unadjusted/240_obs"))
 to_run <- which(!paste0("sim", 1:50) %in% already_ran)
 seeds <- to_run
 future_lapply(seeds, function(this_seed) run_sim_mean_adj(this_seed))
