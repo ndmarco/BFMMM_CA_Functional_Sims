@@ -5,7 +5,7 @@ library(future.apply)
 
 run_sim_mean_adj <- function(iter){
   set.seed(iter)
-  n_obs_vec <- c(60, 120, 240)
+  n_obs_vec <- c(40, 80, 160)
   for(n in 1:3){
     dir.create("data")
     dir.create(paste0("data/", n_obs_vec[n],"_obs"))
@@ -50,7 +50,7 @@ run_sim_mean_adj <- function(iter){
       nu[1,] <- mvrnorm(n=1, mu = seq(6,-8, -2), Sigma = 4*p)
       nu[2,] <- mvrnorm(n=1, mu = seq(-8, 6, 2), Sigma = 4*p)
       for(l in 1:2){
-        eta[,1,l] <- mvrnorm(n=1, mu = rep(rnorm(1,3,1), 8), Sigma = p)
+        eta[,1,l] <- mvrnorm(n=1, mu = rep(rnorm(1,2,.5), 8), Sigma = p)
       }
       
       decomp <- svd(rbind(nu, t(eta[,1,])), nv = 8)
@@ -191,7 +191,7 @@ ncpu <- min(6, availableCores())
 #
 plan(multisession, workers = ncpu)
 
-already_ran <- dir(paste0(getwd(), "/Unadjusted/240_obs"))
+already_ran <- dir(paste0(getwd(), "/Unadjusted/160_obs"))
 to_run <- which(!paste0("sim", 1:50) %in% already_ran)
 seeds <- to_run
 future_lapply(seeds, function(this_seed) run_sim_mean_adj(this_seed))
