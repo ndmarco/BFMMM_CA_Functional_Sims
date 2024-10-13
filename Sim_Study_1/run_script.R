@@ -31,8 +31,8 @@ run_sim_mean_adj_2 <- function(iter){
     n_eigen <- 3
     boundary_knots <- c(0, 1000)
     internal_knots <- c(200, 400, 600, 800)
-    Y[[1]] <- Y[[1]][seq(1,100, 2)]
-    time[[1]] <- time[[1]][seq(1,100, 2)]
+    Y[[1]] <- Y[[1]][seq(1,100, 4)]
+    time[[1]] <- time[[1]][seq(1,100, 4)]
     ## Run function
     x <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
                                  basis_degree, n_eigen, boundary_knots,
@@ -58,16 +58,15 @@ run_sim_mean_adj_2 <- function(iter){
         eta[,2,l] <- mvrnorm(n=1, mu = seq(3,-4, -1), Sigma = p)
       }
 
-      decomp <- svd(nu, nv = 8)
       Phi_i <- matrix(0, nrow = 2, ncol = 8)
-      Phi_i[1,] <- t(rnorm(6, 0, 1.5)) %*% t(decomp$v[,3:8])
-      Phi_i[2,] <- t(rnorm(6, 0, 1.5)) %*% t(decomp$v[,3:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 1.5))
+      Phi_i[2,] <- t(rnorm(8, 0, 1.5))
       Phi_1 <- Phi_i
-      Phi_i[1,] <- t(rnorm(6, 0, 1)) %*% t(decomp$v[,3:8])
-      Phi_i[2,] <- t(rnorm(6, 0, 1)) %*% t(decomp$v[,3:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 1))
+      Phi_i[2,] <- t(rnorm(8, 0, 1))
       Phi_2 <- Phi_i
-      Phi_i[1,] <- t(rnorm(6, 0, 0.7)) %*% t(decomp$v[,3:8])
-      Phi_i[2,] <- t(rnorm(6, 0, 0.7)) %*% t(decomp$v[,3:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 0.7))
+      Phi_i[2,] <- t(rnorm(8, 0, 0.7))
       Phi_3 <- Phi_i
       Phi <- array(0, dim = c(2, 8, 3))
       Phi[,,1] <- matrix(Phi_1, nrow = 2)
@@ -99,7 +98,7 @@ run_sim_mean_adj_2 <- function(iter){
     }
 
     X <- matrix(rnorm(n = 2 * n_obs), ncol = 2, nrow = n_obs)
-    y <- rep(0,50)
+    y <- rep(0,25)
     y <- rep(list(y), n_obs)
     time <- time[[1]]
     time <- rep(list(time), n_obs)
@@ -111,7 +110,7 @@ run_sim_mean_adj_2 <- function(iter){
           mean = mean + Z[i,j] * chi[i,m] * B %*% Phi[j, ,m]
         }
       }
-      y[[i]] = mvrnorm(n = 1, mean, diag(0.001, 50))
+      y[[i]] = mvrnorm(n = 1, mean, diag(0.001, 25))
     }
 
     x <- list("y" = y, "nu" = nu, "Z" = Z, "Phi" = Phi, "Chi" = chi, "eta" = eta, "X" = X)
@@ -131,24 +130,21 @@ run_sim_mean_adj_2 <- function(iter){
     Y <-y
 
     ## Get Estimates of Z and nu
-    est1 <- BFMMM_Nu_Z_multiple_try_Cov_Adj(tot_mcmc_iters, n_try, k, Y, time, X, n_funct,
-                                            basis_degree, n_eigen, boundary_knots,
-                                            internal_knots)
+    est1 <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                                    basis_degree, n_eigen, boundary_knots,
+                                    internal_knots, X= x$X)
     tot_mcmc_iters <- 20000
     n_try <- 10
     ## Get estimates of other parameters
-    est2 <- BFMMM_Theta_est_Cov_Adj(tot_mcmc_iters, n_try, k, Y, time, X, n_funct,
-                                    basis_degree, n_eigen, boundary_knots,
-                                    internal_knots, est1$Z, est1$nu, est1$eta)
-    dir_i <- paste(".CA/", n_obs_vec[n],"_obs/sim",iter, "/", sep="")
+    est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                            basis_degree, n_eigen, boundary_knots,
+                            internal_knots, est1, X = x$X)
+    dir_i <- paste("./CA/", n_obs_vec[n],"_obs/sim",iter, "/", sep="")
     tot_mcmc_iters <- 500000
-    MCMC.chain <-BFMMM_warm_start_Mean_Adj(tot_mcmc_iters, k, Y, X, time, n_funct,
-                                           basis_degree, n_eigen, boundary_knots,
-                                           internal_knots, est1$Z, est1$pi, est1$alpha_3,
-                                           est2$delta, est2$gamma, est2$Phi, est2$A,
-                                           est1$nu, est1$eta, est1$tau, est1$tau_eta,
-                                           est2$sigma, est2$chi, dir = dir_i,
-                                           thinning_num = 100, r_stored_iters = 2500)
+    MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
+                                  basis_degree, n_eigen, boundary_knots,
+                                  internal_knots, est1, est2, dir = dir_i, X = x$X,
+                                  thinning_num = 100, r_stored_iters = 2500)
   }
 }
 
@@ -157,7 +153,7 @@ run_sim_mean_adj_2 <- function(iter){
 ##### Run Simulation
 
 ### Set working dir
-setwd()
+setwd("./two_cov")
 
 ncpu <- min(6, availableCores())
 #
@@ -223,16 +219,15 @@ run_sim_mean_adj_1 <- function(iter){
       eta[,1,1] <- mvrnorm(n=1, mu = rep(2, 8), Sigma = p)
       eta[,1,2] <- mvrnorm(n=1, mu = rep(-2, 8), Sigma = p)
 
-      decomp <- svd(rbind(nu, t(eta[,1,])), nv = 8)
       Phi_i <- matrix(0, nrow = 2, ncol = 8)
-      Phi_i[1,] <- t(rnorm(4, 0, 2)) %*% t(decomp$v[,5:8])
-      Phi_i[2,] <- t(rnorm(4, 0, 2)) %*% t(decomp$v[,5:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 1.5))
+      Phi_i[2,] <- t(rnorm(8, 0, 1.5))
       Phi_1 <- Phi_i
-      Phi_i[1,] <- t(rnorm(4, 0, 1.5)) %*% t(decomp$v[,5:8])
-      Phi_i[2,] <- t(rnorm(4, 0, 1.5)) %*% t(decomp$v[,5:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 1))
+      Phi_i[2,] <- t(rnorm(8, 0, 1))
       Phi_2 <- Phi_i
-      Phi_i[1,] <- t(rnorm(4, 0, 1)) %*% t(decomp$v[,5:8])
-      Phi_i[2,] <- t(rnorm(4, 0, 1)) %*% t(decomp$v[,5:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 0.7))
+      Phi_i[2,] <- t(rnorm(8, 0, 0.7))
       Phi_3 <- Phi_i
       Phi <- array(0, dim = c(2, 8, 3))
       Phi[,,1] <- matrix(Phi_1, nrow = 2)
@@ -262,7 +257,7 @@ run_sim_mean_adj_1 <- function(iter){
       Z[i,] <- rdirichlet(1, alpha)
     }
 
-    X <- matrix(rnorm(n = n_obs, 0, 3), ncol = 1, nrow = n_obs)
+    X <- matrix(rnorm(n = n_obs), ncol = 1, nrow = n_obs)
     y <- rep(0,25)
     y <- rep(list(y), n_obs)
     time <- time[[1]]
@@ -295,27 +290,21 @@ run_sim_mean_adj_1 <- function(iter){
     Y <-y
 
     ## Get Estimates of Z and nu
-    est1 <- BFMMM_Nu_Z_multiple_try_Cov_Adj(tot_mcmc_iters, n_try, k, Y, time, x$X, n_funct,
-                                            basis_degree, n_eigen, boundary_knots,
-                                            internal_knots, alpha_eta = 10, beta_eta = 1,
-                                            alpha_nu = 10, beta_nu = 1)
+    est1 <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                                    basis_degree, n_eigen, boundary_knots,
+                                    internal_knots, X = x$X)
     tot_mcmc_iters <- 20000
     n_try <- 10
     ## Get estimates of other parameters
-    est2 <- BFMMM_Theta_est_Cov_Adj(tot_mcmc_iters, n_try, k, Y, time, x$X, n_funct,
-                                    basis_degree, n_eigen, boundary_knots,
-                                    internal_knots, est1$Z, est1$nu, est1$eta, alpha_eta = 10, beta_eta = 1,
-                                    alpha_nu = 10, beta_nu = 1)
+    est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                            basis_degree, n_eigen, boundary_knots,
+                            internal_knots, est1, X = x$X)
     dir_i <- paste("./CA/", n_obs_vec[n],"_obs/sim",iter, "/", sep="")
-    tot_mcmc_iters <- 300000
-    MCMC.chain <-BFMMM_warm_start_Mean_Adj(tot_mcmc_iters, k, Y, x$X, time, n_funct,
-                                           basis_degree, n_eigen, boundary_knots,
-                                           internal_knots, est1$Z, est1$pi, est1$alpha_3,
-                                           est2$delta, est2$gamma, est2$Phi, est2$A,
-                                           est1$nu, est1$eta, est1$tau, est1$tau_eta,
-                                           est2$sigma, est2$chi, dir = dir_i,
-                                           thinning_num = 100, r_stored_iters = 2500, alpha_eta = 10, beta_eta = 1,
-                                           alpha_nu = 10, beta_nu = 1)
+    tot_mcmc_iters <- 500000
+    MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
+                                  basis_degree, n_eigen, boundary_knots,
+                                  internal_knots, est1, est2, dir = dir_i, X = x$X,
+                                  thinning_num = 100, r_stored_iters = 2500)
   }
   for(n in 1:3){
     n_obs <- n_obs_vec[n]
@@ -339,22 +328,19 @@ run_sim_mean_adj_1 <- function(iter){
     ## Get Estimates of Z and nu
     est1 <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
                                     basis_degree, n_eigen, boundary_knots,
-                                    internal_knots, alpha = 10, beta = 1)
+                                    internal_knots)
     tot_mcmc_iters <- 20000
     n_try <- 10
     ## Get estimates of other parameters
     est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
                             basis_degree, n_eigen, boundary_knots,
-                            internal_knots, est1$Z, est1$nu, alpha = 10, beta = 1)
+                            internal_knots, est1)
     dir_i <- paste("./Unadjusted/", n_obs_vec[n],"_obs/sim",iter, "/", sep="")
-    tot_mcmc_iters <- 300000
+    tot_mcmc_iters <- 500000
     MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
                                   basis_degree, n_eigen, boundary_knots,
-                                  internal_knots, est1$Z, est1$pi, est1$alpha_3,
-                                  est2$delta, est2$gamma, est2$Phi, est2$A,
-                                  est1$nu, est1$tau, est2$sigma, est2$chi, dir = dir_i,
-                                  thinning_num = 100, r_stored_iters = 2500,
-                                  alpha = 10, beta = 1)
+                                  internal_knots, est1, est2, dir = dir_i,
+                                  thinning_num = 100, r_stored_iters = 2500)
   }
 }
 
@@ -363,7 +349,7 @@ run_sim_mean_adj_1 <- function(iter){
 ##### Run Simulation
 
 ### Set working dir
-setwd("")
+setwd("./one_cov")
 
 ncpu <- min(6, availableCores())
 #
@@ -372,7 +358,7 @@ plan(multisession, workers = ncpu)
 already_ran <- dir(paste0(getwd(), "/Unadjusted/200_obs"))
 to_run <- which(!paste0("sim", 1:50) %in% already_ran)
 seeds <- to_run
-future_lapply(seeds, function(this_seed) run_sim_mean_adj(this_seed))
+future_lapply(seeds, function(this_seed) run_sim_mean_adj_1(this_seed))
 
 
 
@@ -426,28 +412,30 @@ run_sim_mean_adj_0 <- function(iter){
       nu[1,] <- mvrnorm(n=1, mu = seq(6,-8, -2), Sigma = 4*p)
       nu[2,] <- mvrnorm(n=1, mu = seq(-8, 6, 2), Sigma = 4*p)
 
-      decomp <- svd(nu, nv = 8)
       Phi_i <- matrix(0, nrow = 2, ncol = 8)
-      Phi_i[1,] <- t(rnorm(6, 0, 1.5)) %*% t(decomp$v[,3:8])
-      Phi_i[2,] <- t(rnorm(6, 0, 1.5)) %*% t(decomp$v[,3:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 1.5))
+      Phi_i[2,] <- t(rnorm(8, 0, 1.5))
       Phi_1 <- Phi_i
-      Phi_i[1,] <- t(rnorm(6, 0, 1)) %*% t(decomp$v[,3:8])
-      Phi_i[2,] <- t(rnorm(6, 0, 1)) %*% t(decomp$v[,3:8])
+      Phi_i[1,] <- t(rnorm(8, 0, 1))
+      Phi_i[2,] <- t(rnorm(8, 0, 1))
       Phi_2 <- Phi_i
-      Phi <- array(0, dim = c(2, 8, 2))
+      Phi_i[1,] <- t(rnorm(8, 0, 0.7))
+      Phi_i[2,] <- t(rnorm(8, 0, 0.7))
+      Phi_3 <- Phi_i
+      Phi <- array(0, dim = c(2, 8, 3))
       Phi[,,1] <- matrix(Phi_1, nrow = 2)
       Phi[,,2] <- matrix(Phi_2, nrow = 2)
+      Phi[,,3] <- matrix(Phi_3, nrow = 2)
     }
     if(n != 1){
       dat <- readRDS(paste("./data/", n_obs_vec[1],"_obs/sim",iter, "/truth.RDS", sep = ""))
       nu <- dat$nu
-      eta <- dat$eta
       Phi <- dat$Phi
     }
 
 
 
-    chi <- matrix(rnorm(n_obs *2, 0, 1), ncol = 2, nrow=n_obs)
+    chi <- matrix(rnorm(n_obs * 3, 0, 1), ncol = 3, nrow=n_obs)
 
     Z <- matrix(0, nrow = n_obs, ncol = 2)
     alpha <- c(10, 1)
@@ -472,7 +460,7 @@ run_sim_mean_adj_0 <- function(iter){
       mean = rep(0,25)
       for(j in 1:2){
         mean = mean + Z[i,j] * B %*% nu[j,]
-        for(m in 1:2){
+        for(m in 1:3){
           mean = mean + Z[i,j] * chi[i,m] * B %*% Phi[j, ,m]
         }
       }
@@ -490,30 +478,27 @@ run_sim_mean_adj_0 <- function(iter){
     k <- 2
     n_funct <- n_obs
     basis_degree <- 3
-    n_eigen <- 2
+    n_eigen <- 3
     boundary_knots <- c(0, 1000)
     internal_knots <- c(200, 400, 600, 800)
     Y <-y
 
     ## Get Estimates of Z and nu
-    est1 <- BFMMM_Nu_Z_multiple_try_Cov_Adj(tot_mcmc_iters, n_try, k, Y, time, x$X, n_funct,
+    est1 <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
                                             basis_degree, n_eigen, boundary_knots,
-                                            internal_knots)
+                                            internal_knots, X = x$X)
     tot_mcmc_iters <- 20000
     n_try <- 10
     ## Get estimates of other parameters
-    est2 <- BFMMM_Theta_est_Cov_Adj(tot_mcmc_iters, n_try, k, Y, time, x$X, n_funct,
-                                    basis_degree, n_eigen, boundary_knots,
-                                    internal_knots, est1$Z, est1$nu, est1$eta)
+    est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                            basis_degree, n_eigen, boundary_knots,
+                            internal_knots, est1, X = x$X)
     dir_i <- paste("./CA/", n_obs_vec[n],"_obs/sim",iter, "/", sep="")
     tot_mcmc_iters <- 500000
-    MCMC.chain <-BFMMM_warm_start_Mean_Adj(tot_mcmc_iters, k, Y, x$X, time, n_funct,
-                                           basis_degree, n_eigen, boundary_knots,
-                                           internal_knots, est1$Z, est1$pi, est1$alpha_3,
-                                           est2$delta, est2$gamma, est2$Phi, est2$A,
-                                           est1$nu, est1$eta, est1$tau, est1$tau_eta,
-                                           est2$sigma, est2$chi, dir = dir_i,
-                                           thinning_num = 100, r_stored_iters = 2500)
+    MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
+                                  basis_degree, n_eigen, boundary_knots,
+                                  internal_knots, est1, est2, dir = dir_i,
+                                  thinning_num = 100, r_stored_iters = 2500, X = x$X)
   }
   for(n in 1:3){
     n_obs <- n_obs_vec[n]
@@ -529,7 +514,7 @@ run_sim_mean_adj_0 <- function(iter){
     k <- 2
     n_funct <- n_obs
     basis_degree <- 3
-    n_eigen <- 2
+    n_eigen <- 3
     boundary_knots <- c(0, 1000)
     internal_knots <- c(200, 400, 600, 800)
     Y <-x$y
@@ -543,14 +528,12 @@ run_sim_mean_adj_0 <- function(iter){
     ## Get estimates of other parameters
     est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
                             basis_degree, n_eigen, boundary_knots,
-                            internal_knots, est1$Z, est1$nu)
+                            internal_knots, est1)
     dir_i <- paste("./Unadjusted/", n_obs_vec[n],"_obs/sim",iter, "/", sep="")
     tot_mcmc_iters <- 500000
     MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
                                   basis_degree, n_eigen, boundary_knots,
-                                  internal_knots, est1$Z, est1$pi, est1$alpha_3,
-                                  est2$delta, est2$gamma, est2$Phi, est2$A,
-                                  est1$nu, est1$tau, est2$sigma, est2$chi, dir = dir_i,
+                                  internal_knots, est1, est2, dir = dir_i,
                                   thinning_num = 100, r_stored_iters = 2500)
   }
 }
@@ -560,7 +543,7 @@ run_sim_mean_adj_0 <- function(iter){
 ##### Run Simulation
 
 ### Set working dir
-setwd("")
+setwd("./zero_cov")
 
 ncpu <- min(6, availableCores())
 #
@@ -569,7 +552,7 @@ plan(multisession, workers = ncpu)
 already_ran <- dir(paste0(getwd(), "/Unadjusted/160_obs"))
 to_run <- which(!paste0("sim", 1:50) %in% already_ran)
 seeds <- to_run
-future_lapply(seeds, function(this_seed) run_sim_mean_adj(this_seed))
+future_lapply(seeds, function(this_seed) run_sim_mean_adj_0(this_seed))
 
 
 

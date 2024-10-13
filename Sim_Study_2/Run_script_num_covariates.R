@@ -1,0 +1,228 @@
+library(MASS)
+library(DirichletReg)
+library(BayesFMMM)
+library(future.apply)
+
+############################################
+## Before running, change the directories ##
+############################################
+##File Structure should be as follows:
+
+## 2_clusters
+######## trace1
+######## ...
+######## trace10
+## 3_clusters
+######## trace1
+######## ...
+######## trace10
+## 4_clusters
+######## trace1
+######## ...
+######## trace10
+## 5_clusters
+######## trace1
+######## ...
+######## trace10
+## data
+
+setwd(".")
+dir.create("1_covariate")
+dir.create("2_covariate")
+dir.create("3_covariate")
+dir.create("data")
+
+run_sim <- function(iter){
+  set.seed(iter)
+  ## Load sample data
+  Y <- readRDS(system.file("test-data", "Sim_data.RDS", package = "BayesFMMM"))
+  time <- readRDS(system.file("test-data", "time.RDS", package = "BayesFMMM"))
+  time[[1]] <- as.matrix(time[[1]][seq(1,100,4),1], ncol = 1)
+  Y[[1]] <- as.matrix(Y[[1]][seq(1,100,4),1], ncol = 1)
+  ## Set Hyperparameters
+  tot_mcmc_iters <- 150
+  n_try <- 1
+  k <- 3
+  n_funct <- 40
+  basis_degree <- 3
+  n_eigen <- 3
+  boundary_knots <- c(0, 1000)
+  internal_knots <- c(200, 400, 600, 800)
+
+  ## Run function
+  x <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                               basis_degree, n_eigen, boundary_knots,
+                               internal_knots)
+  B <- x$B[[1]]
+  n_obs <- 150
+  eta <- array(0, c(8,2,2))
+  nu <- matrix(0,nrow =3, ncol = 8)
+  p <- matrix(0, 8, 8)
+  for(i in 1:8){
+    p[1,1] = 1
+    if(i > 1){
+      p[i,i] = 2
+      p[i-1,i] = -1
+      p[i,i-1] = -1
+    }
+  }
+  nu[1,] <- mvrnorm(n=1, mu = seq(6,-8, -2), Sigma = 4*p)
+  nu[2,] <- mvrnorm(n=1, mu = seq(-8, 6, 2), Sigma = 4*p)
+  nu[3,] <- mvrnorm(n=1, mu = rep(0,8), Sigma = 4*p)
+  Phi_1 <- rnorm(24, 0, 1)
+  Phi_2 <- rnorm(24, 0, 0.5)
+  Phi_3 <- rnorm(24, 0, 0.2)
+  Phi <- array(0, dim = c(3, 8, 3))
+  Phi[,,1] <- matrix(Phi_1, nrow = 3)
+  Phi[,,2] <- matrix(Phi_2, nrow = 3)
+  Phi[,,3] <- matrix(Phi_3, nrow = 3)
+  eta[,1,1] <- mvrnorm(n=1, mu = rep(2, 8), Sigma = p)
+  eta[,1,2] <- mvrnorm(n=1, mu = rep(-2, 8), Sigma = p)
+  eta[,2,1] <- mvrnorm(n=1, mu = seq(1,8,1), Sigma = p)
+  eta[,2,2] <- mvrnorm(n=1, mu = seq(8,1,-1), Sigma = p)
+
+  chi <- matrix(rnorm(n_obs *3, 0, 1), ncol = 3, nrow=n_obs)
+
+  Z <- matrix(0, nrow = n_obs, ncol = 3)
+  alpha <- c(30, 1, 1)
+  for(i in 1:(n_obs * 0.2)){
+    Z[i,] <- rdirichlet(1, alpha)
+  }
+  alpha <- c(1, 30, 1)
+  for(i in (n_obs * 0.2 + 1):(n_obs * 0.4)){
+    Z[i,] <- rdirichlet(1, alpha)
+  }
+  alpha <- c(1, 1, 30)
+  for(i in (n_obs * 0.4 + 1):(n_obs * 0.6)){
+    Z[i,] <- rdirichlet(1, alpha)
+  }
+  alpha <- c(1, 1, 1)
+  for(i in (n_obs * 0.6 + 1):n_obs){
+    Z[i,] <- rdirichlet(1, alpha)
+  }
+
+  X <- matrix(rnorm(n = n_obs * 2, 0, 3), ncol = 2, nrow = n_obs)
+  y <- rep(0,25)
+  y <- rep(list(y), n_obs)
+  time <- time[[1]]
+  time <- rep(list(time), n_obs)
+  for(i in 1:n_obs){
+    mean = rep(0,25)
+    for(j in 1:2){
+      mean = mean + Z[i,j] * B %*% t(nu[j,] + t(eta[, , j] %*% t(t(X[i,]))))
+      for(m in 1:3){
+        mean = mean + Z[i,j] * chi[i,m] * B %*% Phi[j, ,m]
+      }
+    }
+    y[[i]] = mvrnorm(n = 1, mean, diag(0.001, 25))
+  }
+  X <- cbind(X, rnorm(n = n_obs, 0, 3))
+  dir.create("data")
+  x <- list("y" = y, "nu" = nu, "Z" = Z, "Phi" = Phi, "Chi" = chi, "X" = X, "eta" = eta)
+  saveRDS(x, paste("./data/data", iter, ".RDS", sep = ""))
+  Y <- y
+
+
+  ####### 1 covariate #########
+  ############################
+  ## Set Hyperparameters
+  tot_mcmc_iters <- 2000
+  n_try <- 20
+  k <- 2
+  n_funct <- 150
+  basis_degree <- 3
+  n_eigen <- 3
+  boundary_knots <- c(0, 1000)
+  internal_knots <- c(200, 400, 600, 800)
+  dir.create(paste0("1_covariate/trace", iter))
+  X_run <- matrix(X[,1], ncol = 1)
+
+  ## Get Estimates of Z and nu
+  est1 <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                                  basis_degree, n_eigen, boundary_knots,
+                                  internal_knots, X = X_run)
+  tot_mcmc_iters <- 4000
+  n_try <- 5
+  ## Get estimates of other parameters
+  est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                          basis_degree, n_eigen, boundary_knots,
+                          internal_knots, est1, X = X_run)
+  dir_i <- paste( "./1_covariate/trace", iter, "/", sep="")
+  tot_mcmc_iters <- 200000
+  MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
+                                basis_degree, n_eigen, boundary_knots,
+                                internal_knots, est1, est2, dir = dir_i,
+                                thinning_num = 10, r_stored_iters = 10000, X = X_run)
+
+  ####### 2 Covariates #######
+  ############################
+  ## Set Hyperparameters
+  tot_mcmc_iters <- 2000
+  n_try <- 20
+  k <- 2
+  n_funct <- 150
+  basis_degree <- 3
+  n_eigen <- 3
+  boundary_knots <- c(0, 1000)
+  internal_knots <- c(200, 400, 600, 800)
+  dir.create(paste0("2_covariate/trace", iter))
+  X_run <- matrix(X[,1:2], ncol = 1)
+  
+  ## Get Estimates of Z and nu
+  est1 <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                                  basis_degree, n_eigen, boundary_knots,
+                                  internal_knots, X = X_run)
+  tot_mcmc_iters <- 4000
+  n_try <- 5
+  ## Get estimates of other parameters
+  est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                          basis_degree, n_eigen, boundary_knots,
+                          internal_knots, est1, X = X_run)
+  dir_i <- paste("./2_covariate/trace", iter, "/", sep="")
+  tot_mcmc_iters <- 200000
+  MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
+                                basis_degree, n_eigen, boundary_knots,
+                                internal_knots, est1, est2, dir = dir_i,
+                                thinning_num = 10, r_stored_iters = 10000, X = X_run)
+
+  ####### 3 Covariates #######
+  ############################
+  ## Set Hyperparameters
+  tot_mcmc_iters <- 2000
+  n_try <- 20
+  k <- 2
+  n_funct <- 150
+  basis_degree <- 3
+  n_eigen <- 3
+  boundary_knots <- c(0, 1000)
+  internal_knots <- c(200, 400, 600, 800)
+  dir.create(paste0("3_covariate/trace", iter))
+  X_run <- X
+
+  ## Get Estimates of Z and nu
+  est1 <- BFMMM_Nu_Z_multiple_try(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                                  basis_degree, n_eigen, boundary_knots,
+                                  internal_knots, X = X_run)
+  tot_mcmc_iters <- 4000
+  n_try <- 5
+  ## Get estimates of other parameters
+  est2 <- BFMMM_Theta_est(tot_mcmc_iters, n_try, k, Y, time, n_funct,
+                          basis_degree, n_eigen, boundary_knots,
+                          internal_knots, est1, X = X_run)
+  dir_i <- paste("./3_covariate/trace", iter, "/", sep="")
+  tot_mcmc_iters <- 200000
+  MCMC.chain <-BFMMM_warm_start(tot_mcmc_iters, k, Y, time, n_funct,
+                                basis_degree, n_eigen, boundary_knots,
+                                internal_knots, est1, est2, dir = dir_i,
+                                thinning_num = 10, r_stored_iters = 10000, X = X_run)
+
+}
+
+ncpu <- min(6, availableCores())
+#
+plan(multisession, workers = ncpu)
+
+already_ran <- dir(paste0(getwd(), "/3_covariate"))
+to_run <- which(!paste0("trace", 1:50) %in% already_ran)
+seeds <- to_run
+future_lapply(seeds, function(this_seed) run_sim(this_seed))
